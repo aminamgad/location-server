@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Driver Location Map</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    #map {
+      height: 400px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Driver Location Map</h1>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.1.2/socket.io.js"></script>
+  <script>
+    const socket = io.connect('http://localhost:3100', { transports: ['websocket'] });
+
+    const map = L.map('map').setView([0, 0], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+    const userMarker = L.marker([0, 0]).addTo(map);
+    userMarker.bindPopup('Your Location');
+
+    socket.on('locationUpdate', (data) => {
+      const { driverId, latitude, longitude } = data;
+      updateMarker(driverId, latitude, longitude);
+    });
+
+    function updateMarker(driverId, latitude, longitude) {
+      if (map.hasLayer(driverMarkers[driverId])) {
+        map.removeLayer(driverMarkers[driverId]);
+      }
+
+      const marker = L.marker([latitude, longitude]).addTo(map);
+      driverMarkers[driverId] = marker;
+
+      marker.bindPopup(`Driver ${driverId}<br>Latitude: ${latitude}<br>Longitude: ${longitude}`);
+    }
+
+    const driverMarkers = {};
+
+    async function getUserLocation() {
+      try {
+        navigator.geolocation.getCurrentPosition((position) => {
+          const latitude = position.coords.latitude;
+          const longitude = position.coords.longitude;
+
+          fetch('http://localhost:3100/updateUserLocation/65e053a041503c640b6689ef', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              latitude: parseFloat(latitude),
+              longitude: parseFloat(longitude),
+            }),
+          });
+
+          userMarker.setLatLng([parseFloat(latitude), parseFloat(longitude)]);
+          map.setView([parseFloat(latitude), parseFloat(longitude)], 13);
+        });
+      } catch (error) {
+        console.error('Error getting user location:', error.message);
+      }
+    }
+
+    getUserLocation();
+
+    const updateInterval = 5000;
+    setInterval(getUserLocation, updateInterval);
+  </script>
+</body>
+</html>
